@@ -94,11 +94,9 @@ services:
       # Snapshots via the camera's HTTPS API instead of a fourth always-on
       # RTSP session (Reolink WiFi cams limit concurrent RTSP connections).
       - --snapshot-url
-      - "http://${CAM_IP}/cgi-bin/api.cgi?cmd=Snap&channel=0&rs=proxy&user=${CAM_USER}&password=${CAM_PASS}"
+      - "https://${CAM_IP}/cgi-bin/api.cgi?cmd=Snap&channel=0&rs=proxy&user=${CAM_USER}&password=${CAM_PASS}"
       - --reolink-push-ai
       - --reolink-push-button
-      - --reolink-scheme
-      - http
       - --doorbell
       # Bridge the camera's on-board AI (person/vehicle/animal) into
       # Protect smart detections — no AI Port involved.
