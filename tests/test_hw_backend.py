@@ -89,11 +89,11 @@ async def test_vaapi_pipeline_keeps_hardware_frames_and_correct_framing(
     if stream == "video1":
         assert argv[argv.index("-c:v") + 1] == "h264_vaapi"
         assert argv[argv.index("-vf") + 1] == "scale_vaapi=w=2560:h=776:format=nv12"
-        assert "unifi.hevc_flv" not in argv
     else:
         assert argv[argv.index("-c:v") + 1] == "hevc_vaapi"
         assert argv[argv.index("-vf") + 1] == "scale_vaapi=format=nv12"
-        assert "unifi.hevc_flv" in argv
+    # every channel gets the metadata rewrite, with its own channelId
+    assert argv[argv.index("unifi.hevc_flv") + 1] == str(int(stream[-1]) - 1)
 
 
 def test_high_transcode_does_not_enable_lower_transcodes(monkeypatch):

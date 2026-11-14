@@ -191,14 +191,16 @@ def _extract_stream_name(body: bytes):
     return value.decode("utf-8", errors="replace") if len(value) == length else None
 
 
-def replace_metadata(body: bytes) -> bytes:
+def replace_metadata(body: bytes, channel: int = 0) -> bytes:
     """Swap ffmpeg's onMetaData for the vocabulary a real camera announces.
 
     Protect reads the camera's nine-key AMF0 OBJECT (0x03) — notably
     `extendedFormat: true`, which flags the codec-id-8 extended framing —
     while ffmpeg emits an ECMA array (0x08) full of keys the camera never
-    sends. streamName is carried over; channelId/streamId are video1's
-    (this filter only runs on the hi channel).
+    sends. streamName is carried over. channelId is how Protect files the
+    stream (<MAC>_<channelId>); a real camera sends video1 -> 0/streamId 1,
+    video2 -> 1/2, video3 -> 2/4 (rjmotion/pyunifiwire SPEC.md 3.3). Every
+    channel announcing 0 leaves <MAC>_1 and <MAC>_2 never opening.
     """
     if b"onMetaData" not in body:
         return body
@@ -208,12 +210,12 @@ def replace_metadata(body: bytes) -> bytes:
     fields = {
         "audioBandwidth": 32000.0,
         "audioChannels": 1.0,
-        "audioFrequency": 32000.0,
-        "channelId": 0.0,
+        "audioFrequency": 16000.0,  # what the pipeline's AAC actually is
+        "channelId": float(channel),
         "extendedFormat": True,
         "hasAudio": True,
         "hasVideo": True,
-        "streamId": 1.0,
+        "streamId": float(1 << channel),
         "streamName": name,
     }
     obj = bytearray([0x03])
@@ -223,10 +225,33 @@ def replace_metadata(body: bytes) -> bytes:
     return bytes([0x02]) + _amf_string("onMetaData") + bytes(obj)
 
 
+def smooth_ts(ts: int, state: dict) -> int:
+    """Even out video tag timestamps so browsers keep every frame.
+
+    Reolink stamps frames when it SENDS them: ~0.7 s of nothing after each
+    keyframe, then a burst 6-70 ms apart (measured on the doorbell). Chrome's
+    MSE treats a step over 2x the previous frame's duration as a break and
+    drops frames until the next keyframe, so Protect's web live view showed
+    ~0.2 s of every GOP. Each step is clamped to 0.7-1.3x the running mean
+    interval: durations stay within 2x of each other and the output still
+    follows the camera clock, so audio stays in sync.
+    """
+    out = state.get("ts_out")
+    if out is None or abs(ts - out) > 3000:  # first tag, or the camera clock jumped
+        state.update(ts_out=float(ts), ts_in=ts)
+        return ts
+    mean = state.setdefault("ts_mean", 50.0)
+    mean += (min(max(ts - state["ts_in"], 1), 500) - mean) * 0.02
+    state.update(ts_mean=mean, ts_in=ts)
+    state["ts_out"] = out + min(max(ts - out, 0.7 * mean), 1.3 * mean)
+    return round(state["ts_out"])
+
+
 def main() -> None:
     source = sys.stdin.buffer
     sink = sys.stdout.buffer
     state: dict = {"config_done": False}
+    channel = int(sys.argv[1]) if len(sys.argv) > 1 else 0
 
     # FLV header (9 bytes) + first previous-tag-size (4): pass through.
     head = read_exact(source, 9 + PREV_SIZE_LEN)
@@ -250,8 +275,10 @@ def main() -> None:
         kind = header[0]
         if kind == TAG_VIDEO:
             bodies = transform_video(body, state)
+            ts = smooth_ts(int.from_bytes(header[7:8] + header[4:7], "big"), state)
+            header = header[:4] + ts.to_bytes(4, "big")[1:] + ts.to_bytes(4, "big")[:1] + header[8:]
         elif kind == TAG_SCRIPT:
-            bodies = [replace_metadata(body)]
+            bodies = [replace_metadata(body, channel)]
         else:
             bodies = [body]
 

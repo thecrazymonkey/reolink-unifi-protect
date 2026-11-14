@@ -1955,9 +1955,11 @@ class UnifiCamBase(metaclass=ABCMeta):
             # ffmpeg muxes HEVC into FLV as Enhanced-RTMP hvc1 extended
             # tags, which Protect ingests but cannot decode; hevc_flv
             # rewrites them into UniFi's codec-id-8 framing (see module).
-            hevc_filter = ""
-            if self._emits_h265(stream_index):
-                hevc_filter = f"{sys.executable} -m unifi.hevc_flv | "
+            # It runs on H.264 channels too (video tags pass through): its
+            # onMetaData rewrite carries the per-channel channelId Protect
+            # needs to open <MAC>_<n>; ffmpeg's own metadata has none.
+            channel = int(stream_index[-1]) - 1  # video1..3 -> 0..2
+            hevc_filter = f"{sys.executable} -m unifi.hevc_flv {channel} | "
             cmd = (
                 "ffmpeg -nostdin -loglevel error -y"
                 f" {self.get_base_ffmpeg_args(stream_index)} -rtsp_transport"

@@ -49,6 +49,7 @@ services:
         max-file: "3"
     command:
       - unifi-cam-proxy
+      - -v
       - --host
       - "${NVR_IP}"
       - --cert
@@ -93,7 +94,12 @@ services:
       # Snapshots via the camera's HTTPS API instead of a fourth always-on
       # RTSP session (Reolink WiFi cams limit concurrent RTSP connections).
       - --snapshot-url
-      - "https://${CAM_IP}/cgi-bin/api.cgi?cmd=Snap&channel=0&rs=proxy&user=${CAM_USER}&password=${CAM_PASS}"
+      - "http://${CAM_IP}/cgi-bin/api.cgi?cmd=Snap&channel=0&rs=proxy&user=${CAM_USER}&password=${CAM_PASS}"
+      - --reolink-push-ai
+      - --reolink-push-button
+      - --reolink-scheme
+      - http
+      - --doorbell
       # Bridge the camera's on-board AI (person/vehicle/animal) into
       # Protect smart detections — no AI Port involved.
       - --reolink-ai-host
@@ -122,28 +128,23 @@ services:
       # UniFi cameras send. Timestamps still come from the camera's RTP
       # clock (wallclock stamping removed in base.py).
       - --ffmpeg-args
-      - "-c:v copy -ar 16000 -ac 1 -c:a aac -b:a 32k"
+      - "-c:v copy -af asetpts=N/SR/TB -ar 16000 -ac 1 -c:a aac -b:a 32k"
+      # Doorbell streams (probed via ffprobe): main H.264 2560x1920,
+      # sub H.264 640x480 (measured ~14 fps main, ~10 fps sub), AAC 16k mono. Pure passthrough, no transcode.
       - --hi-codec
-      - h265
+      - h264
       - --hi-width
-      - "5120"
+      - "2560"
       - --hi-height
-      - "1552"
-      - --hi-fps
-      - "20"
-      - --lo-codec
-      - h265
-      - --lo-h265-transcode
-      # Same reason as --ffmpeg-args: the transcoded channels copy audio
-      # by default, which FFmpeg 7.1 drops for this camera.
-      - --lo-audio-args
-      - "-ar 16000 -ac 1 -c:a aac -b:a 32k"
-      - --lo-width
       - "1920"
+      - --hi-fps
+      - "14"
+      - --lo-width
+      - "640"
       - --lo-height
-      - "576"
+      - "480"
       - --lo-fps
-      - "30"
+      - "10"
 
   # Decodes the camera's own AI detection rectangles (person/vehicle/
   # animal, the same boxes the Reolink app draws) off the Baichuan

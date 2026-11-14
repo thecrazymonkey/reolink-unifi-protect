@@ -73,7 +73,6 @@ def main(args):
     write(read_bytes(source, 4))
 
     last_ts = time.time()
-    start = time.time()
     i = 0
     while True:
         # Packet structure from Wikipedia:
@@ -117,7 +116,7 @@ def main(args):
             write(packet_to_inject)
 
             # Write 15 byte trailer
-            write_timestamp_trailer(False, now - start)
+            write_timestamp_trailer(False, timestamp / 1000)
 
             # Write mpma tag
             # {'cs': {'cur': 1500000.0,
@@ -154,7 +153,7 @@ def main(args):
             write(packet_to_inject)
 
             # Write 15 byte trailer
-            write_timestamp_trailer(False, now - start)
+            write_timestamp_trailer(False, timestamp / 1000)
 
             # Write rest of original packet minus previous packet size
             write(header)
@@ -168,7 +167,7 @@ def main(args):
         write(read_bytes(source, 3))
 
         # Write 15 byte trailer
-        write_timestamp_trailer(packet_type == 9, now - start)
+        write_timestamp_trailer(packet_type == 9, timestamp / 1000)
 
         # Write mpma tag
         i += 1
