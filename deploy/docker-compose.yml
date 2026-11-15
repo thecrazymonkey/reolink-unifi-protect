@@ -1,9 +1,9 @@
 # House deployment -> UniFi Protect:
 #   reolink-floodlight-proxy  "Zvonek" Reolink doorbell, H.264 passthrough
 #                             (service name kept from upstream's floodlight)
-#   tapo-c120-proxy           "Garaz", H.264 passthrough
-#   laview-proxy              "Backyard", H.265 main passthrough (enhanced
-#                             encoding), sub stream re-encoded to HEVC
+#   laview-proxy              "Backyard", H.265 main + H.264 sub, both
+#                             passed through
+# "Garaz" (Tapo C120) moved to k3s: fleet-infra clusters/k3s/apps/cameras.
 #
 # Secrets (camera password, adoption token) come from an .env file that lives
 # ONLY on the NAS next to this compose and is gitignored. Required vars:
@@ -156,80 +156,10 @@ services:
       - --lo-fps
       - "10"
 
-  # Tapo C120 (ONVIF profiles probed 2026-11-14): H.264 2560x1440 and
-  # 640x360, both 20 fps, G.711 A-law 8k audio (re-encoded to AAC below).
-  # Generic rtsp source: video, recording and ONVIF motion events.
-  # Start once TAPO_TOKEN is in .env: docker compose up -d tapo-c120-proxy
-  tapo-c120-proxy:
-    image: unifi-cam-proxy:vaapi
-    container_name: tapo-c120-proxy
-    restart: unless-stopped
-    environment:
-      - TZ=EST5EDT,M3.2.0,M11.1.0
-    volumes:
-      - ./client.pem:/client.pem:ro
-    logging:
-      driver: json-file
-      options:
-        max-size: "10m"
-        max-file: "3"
-    command:
-      - unifi-cam-proxy
-      - --host
-      - "${NVR_IP}"
-      - --cert
-      - /client.pem
-      - --token
-      - "${TAPO_TOKEN}"
-      - --mac
-      - "${TAPO_MAC}"
-      - --ip
-      - "${TAPO_IP}"
-      - --name
-      - "${TAPO_NAME}"
-      - --model
-      - "UVC G5 Pro"
-      - --sysid
-      - "0xa598"
-      - --platform
-      - "sav837gw"
-      - --fw-version
-      - "5.5.45"
-      - --fw-build
-      - "92ebf37.260724.1639"
-      - rtsp
-      - -s
-      - "rtsp://${TAPO_USER}:${TAPO_PASS}@${TAPO_IP}:554/stream1"
-      - "rtsp://${TAPO_USER}:${TAPO_PASS}@${TAPO_IP}:554/stream2"
-      # Motion from the camera's ONVIF PullPoint (CellMotionDetector).
-      - --onvif-events
-      - "${TAPO_IP}:2020"
-      - --onvif-user
-      - "${TAPO_USER}"
-      - --onvif-password
-      - "${TAPO_PASS}"
-      - --ffmpeg-args
-      - "-c:v copy -af asetpts=N/SR/TB -ar 16000 -ac 1 -c:a aac -b:a 32k"
-      - --hi-codec
-      - h264
-      - --hi-width
-      - "2560"
-      - --hi-height
-      - "1440"
-      - --hi-fps
-      - "20"
-      - --lo-width
-      - "640"
-      - --lo-height
-      - "360"
-      - --lo-fps
-      - "20"
-
   # LaView LV-PWL2 (probed 2026-11-14): channel0 is HEVC 2560x1440 ~12 fps
   # (ONVIF wrongly says H.264), channel1 H.264 640x360. RTSP on 5543 under a
-  # per-device path (LAVIEW_RTSP_PATH in .env), no auth. Main stream is
-  # passed through as H.265; the H.264 sub stream is re-encoded to HEVC
-  # (CPU decode + VA-API encode). Motion via ONVIF events, no smart detections.
+  # per-device path (LAVIEW_RTSP_PATH in .env), no auth. Both streams are
+  # passed through unchanged. Motion via ONVIF events, no smart detections.
   # The camera allows 2 RTSP sessions, so the proxy reads via go2rtc.
   laview-go2rtc:
     image: alexxit/go2rtc:1.9.15
