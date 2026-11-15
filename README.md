@@ -1,3 +1,26 @@
+> ## Changes in this fork (thecrazymonkey)
+>
+> Fork of [woutersteegers/reolink-unifi-protect](https://github.com/woutersteegers/reolink-unifi-protect),
+> tested on Protect 7.3.74 (UCG Max). The original README follows below the line.
+>
+> - **Reolink doorbell live video in the web player** — every channel goes through
+>   `unifi.hevc_flv` so onMetaData carries per-channel `channelId`/`streamId`
+>   (fixes black video); video timestamps are smoothed (`smooth_ts`) and audio
+>   re-stamped (`asetpts`) to stop 2 s jumps.
+> - **Doorbell ring** — a button press rings Protect through a scoped local user
+>   (`--protect-ring-user` / `--protect-ring-password`).
+> - **Generic RTSP cameras** — Tapo C120 (H.264 passthrough) and LaView LV-PWL2
+>   (via a go2rtc relay, since it allows only 2 RTSP sessions; `--sw-decode` for
+>   HEVC that VA-API can't decode; snapshots from go2rtc `/api/frame.jpeg`).
+> - **ONVIF motion events** (`--onvif-events`) — PullPoint subscription that maps
+>   MotionAlarm / CellMotionDetector to Protect motion events; event URLs are
+>   pinned to the configured camera host.
+> - **Deploy** — `deploy/docker-compose.yml`: containers on `TZ=EST5EDT,M3.2.0,M11.1.0`,
+>   declared fps matching the cameras' encoder settings, go2rtc 1.9.15 with its
+>   API locked down and no published ports.
+
+---
+
 # Reolink → UniFi Protect Bridge
 
 Gets a non-Ubiquiti camera into UniFi Protect as a *first-class* citizen.
