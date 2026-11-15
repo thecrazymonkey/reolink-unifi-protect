@@ -12,6 +12,7 @@ import hashlib
 import logging
 import os
 import re
+import urllib.parse
 from typing import Awaitable, Callable, Optional
 from xml.sax.saxutils import escape
 
@@ -42,6 +43,15 @@ def envelope(user: str, password: str, body: str) -> str:
         f'<Created xmlns="{wsse}-wssecurity-utility-1.0.xsd">{created}</Created>'
         f"</UsernameToken></Security></s:Header><s:Body>{body}</s:Body></s:Envelope>"
     )
+
+
+def pin_host(url: str, host: str) -> str:
+    """Keep port and path from a camera-supplied URL but force the configured host,
+    so credentials never go to an address the camera's reply names."""
+    u = urllib.parse.urlsplit(url)
+    ip = host.rsplit(":", 1)[0]
+    netloc = f"{ip}:{u.port}" if u.port else ip
+    return urllib.parse.urlunsplit(("http", netloc, u.path, u.query, ""))
 
 
 def motion_state(xml: str) -> Optional[bool]:
@@ -91,21 +101,22 @@ async def watch(
                 xaddr = re.search(r"Events>\s*<[^>]*XAddr>([^<]+)<", caps)
                 if not xaddr:
                     raise RuntimeError(f"no event service: {caps[:200]}")
-                sub = await call(xaddr.group(1), SUBSCRIBE)
-                addr = re.search(r"Address>([^<]+)<", sub)
-                if not addr:
+                sub = await call(pin_host(xaddr.group(1), host), SUBSCRIBE)
+                found = re.search(r"Address>([^<]+)<", sub)
+                if not found:
                     raise RuntimeError(f"subscribe failed: {sub[:200]}")
+                pull_url = pin_host(found.group(1), host)
                 logger.info("ONVIF events subscribed")
                 delay = 2.0
                 while True:
-                    reply = await call(addr.group(1), PULL)
+                    reply = await call(pull_url, PULL)
                     if "Fault" in reply:
                         raise RuntimeError(f"pull fault: {reply[:200]}")
                     state = motion_state(reply)
                     if state is not None and state != active:
                         active = state
                         await on_motion(state)
-                    await call(addr.group(1), RENEW)
+                    await call(pull_url, RENEW)
             except asyncio.CancelledError:
                 raise
             except Exception as e:

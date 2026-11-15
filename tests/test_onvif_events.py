@@ -1,6 +1,6 @@
 """ONVIF PullPoint parsing: motion topics only, last state wins."""
 
-from unifi.onvif_events import envelope, motion_state
+from unifi.onvif_events import envelope, motion_state, pin_host
 
 
 def msg(topic, name, value):
@@ -28,6 +28,13 @@ def test_non_motion_topics_ignored():
     xml = msg("tns1:VideoSource/ImageTooDark/ImagingService", "State", "true")
     assert motion_state(xml) is None
     assert motion_state("<Envelope/>") is None
+
+
+def test_pin_host_ignores_camera_supplied_host():
+    pin = lambda u: pin_host(u, "192.168.51.103:8000")
+    assert pin("http://192.168.51.103:8000/event_service/0") == "http://192.168.51.103:8000/event_service/0"
+    assert pin("https://evil.example:9/x?a=1") == "http://192.168.51.103:9/x?a=1"
+    assert pin("http://user@10.0.0.9/onvif/events") == "http://192.168.51.103/onvif/events"
 
 
 def test_envelope_escapes_user():
