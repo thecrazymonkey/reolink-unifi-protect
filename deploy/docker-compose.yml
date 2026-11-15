@@ -100,6 +100,12 @@ services:
       - --reolink-scheme
       - http
       - --doorbell
+      # Local non-admin UniFi OS user with write on this camera only; a
+      # button press rings Protect through it (docs/DOORBELL.md).
+      - --protect-ring-user
+      - "${ZVONEK_ADMIN}"
+      - --protect-ring-password
+      - "${ZVONEK_PASS}"
       # Bridge the camera's on-board AI (person/vehicle/animal) into
       # Protect smart detections — no AI Port involved.
       - --reolink-ai-host
