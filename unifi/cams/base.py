@@ -204,9 +204,10 @@ class UnifiCamBase(metaclass=ABCMeta):
         parser.add_argument("--lo-width", default=1280, type=int)
         parser.add_argument("--lo-height", default=720, type=int)
         parser.add_argument("--lo-fps", default=15, type=int)
-        # With camera-level videoCodec=h265 (enhanced encoding) Protect
-        # expects EVERY channel to carry HEVC and skips H.264 segments
-        # (msr: "TranscodeSegment codec mismatch"). This QSV-encodes the
+        # Upstream saw Protect skip H.264 lo segments when the camera-level
+        # videoCodec was h265 (msr: "TranscodeSegment codec mismatch"). Not
+        # reproduced on Protect 7.3.74: an H.264 Low channel next to an H.265
+        # High one plays fine, so try --lo-codec h264 first. This QSV-encodes the
         # already-H.264 lo channels to HEVC on the iGPU — 1920x576@30
         # measured ~4.4x realtime, so two channels fit easily.
         parser.add_argument(

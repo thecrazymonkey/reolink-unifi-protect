@@ -10,8 +10,9 @@
 > - **Doorbell ring** — a button press rings Protect through a scoped local user
 >   (`--protect-ring-user` / `--protect-ring-password`).
 > - **Generic RTSP cameras** — Tapo C120 (H.264 passthrough) and LaView LV-PWL2
->   (via a go2rtc relay, since it allows only 2 RTSP sessions; `--sw-decode` for
->   HEVC that VA-API can't decode; snapshots from go2rtc `/api/frame.jpeg`).
+>   (via a go2rtc relay, since it allows only 2 RTSP sessions; H.265 main and
+>   H.264 sub both passed through, since Protect 7.3.74 accepts mixed codecs;
+>   snapshots from go2rtc `/api/frame.jpeg`).
 > - **ONVIF motion events** (`--onvif-events`) — PullPoint subscription that maps
 >   MotionAlarm / CellMotionDetector to Protect motion events; event URLs are
 >   pinned to the configured camera host.

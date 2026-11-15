@@ -307,17 +307,11 @@ services:
       - "${LAVIEW_PASS}"
       - --ffmpeg-args
       - "-c:v copy -af asetpts=N/SR/TB -ar 16000 -ac 1 -c:a aac -b:a 32k"
-      # Main stream is H.265 (8-bit Main, 2560x1440): passed through as-is.
-      # With enhanced encoding Protect wants EVERY channel in HEVC, so only
-      # the small H.264 sub stream is re-encoded to HEVC on the iGPU.
-      - --lo-h265-transcode
-      - --lo-transcode-bitrate
-      - "400k"
-      - --lo-audio-args
-      - "-af asetpts=N/SR/TB -ar 16000 -ac 1 -c:a aac -b:a 32k"
-      - --hw-backend
-      - vaapi
-      - --sw-decode
+      # Both streams are passed through as-is: main H.265 (2560x1440), sub
+      # H.264 (640x360). Protect 7.3.74 plays an H.264 Low channel next to an
+      # H.265 High one (tested 2026-11-15), so no GPU re-encode is needed.
+      - --lo-codec
+      - h264
       - --hi-codec
       - h265
       - --hi-width
