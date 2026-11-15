@@ -148,7 +148,7 @@ services:
 
   # Tapo C120 (ONVIF profiles probed 2026-11-14): H.264 2560x1440 and
   # 640x360, both 20 fps, G.711 A-law 8k audio (re-encoded to AAC below).
-  # Generic rtsp source: video + recording only, no motion events.
+  # Generic rtsp source: video, recording and ONVIF motion events.
   # Start once TAPO_TOKEN is in .env: docker compose up -d tapo-c120-proxy
   tapo-c120-proxy:
     image: unifi-cam-proxy:vaapi
@@ -189,6 +189,13 @@ services:
       - -s
       - "rtsp://${TAPO_USER}:${TAPO_PASS}@${TAPO_IP}:554/stream1"
       - "rtsp://${TAPO_USER}:${TAPO_PASS}@${TAPO_IP}:554/stream2"
+      # Motion from the camera's ONVIF PullPoint (CellMotionDetector).
+      - --onvif-events
+      - "${TAPO_IP}:2020"
+      - --onvif-user
+      - "${TAPO_USER}"
+      - --onvif-password
+      - "${TAPO_PASS}"
       - --ffmpeg-args
       - "-c:v copy -af asetpts=N/SR/TB -ar 16000 -ac 1 -c:a aac -b:a 32k"
       - --hi-codec
@@ -213,7 +220,7 @@ services:
   # stream) + VA-API encode. Motion via ONVIF events, no smart detections.
   # The camera allows 2 RTSP sessions, so the proxy reads via go2rtc.
   laview-go2rtc:
-    image: alexxit/go2rtc:1.9.9
+    image: alexxit/go2rtc:1.9.15
     container_name: laview-go2rtc
     restart: unless-stopped
     environment:
@@ -274,6 +281,9 @@ services:
       - -s
       - rtsp://laview-go2rtc:8554/laview_main
       - rtsp://laview-go2rtc:8554/laview_sub
+      # On-demand JPEG from the relay instead of an always-on snapshot ffmpeg.
+      - --snapshot-url
+      - http://laview-go2rtc:1984/api/frame.jpeg?src=laview_sub
       # Motion from the camera's ONVIF PullPoint (VideoSource/MotionAlarm).
       - --onvif-events
       - "${LAVIEW_IP}:8000"

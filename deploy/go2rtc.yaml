@@ -7,7 +7,14 @@ streams:
 
 rtsp:
   listen: ":8554"
+# Lock-down per go2rtc's security notes (needs >= 1.9.12, older versions
+# silently ignore these keys): the full API can add exec: sources.
+app:
+  modules: [api, rtsp, ffmpeg, exec, mjpeg]
 api:
-  listen: "" # no web UI
+  listen: ":1984" # compose network only, no published port
+  allow_paths: ["/api/frame.jpeg"]
+exec:
+  allow_paths: [ffmpeg]
 webrtc:
   listen: ""
