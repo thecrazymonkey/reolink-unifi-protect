@@ -33,6 +33,7 @@ services:
     # driver loaded and can encode ("iGPU check passed/FAILED").
     environment:
       - LIBVA_DRIVER_NAME=iHD
+      - TZ=EST5EDT,M3.2.0,M11.1.0 # log timestamps only; full POSIX rule, so musl (go2rtc) needs no tzdata either
     volumes:
       - ./client.pem:/client.pem:ro
       # Scratch space (motion snapshots, per-object crops) on a bounded
@@ -136,7 +137,9 @@ services:
       - --ffmpeg-args
       - "-c:v copy -af asetpts=N/SR/TB -ar 16000 -ac 1 -c:a aac -b:a 32k"
       # Doorbell streams (probed via ffprobe): main H.264 2560x1920,
-      # sub H.264 640x480 (measured ~14 fps main, ~10 fps sub), AAC 16k mono. Pure passthrough, no transcode.
+      # sub H.264 640x480, AAC 16k mono. Pure passthrough, no transcode.
+      # fps = the camera's encoder setting (GetEnc: main 20, sub 10); night
+      # mode drops the real rate (~17 measured), so don't declare from that.
       - --hi-codec
       - h264
       - --hi-width
@@ -144,7 +147,7 @@ services:
       - --hi-height
       - "1920"
       - --hi-fps
-      - "14"
+      - "20"
       - --lo-width
       - "640"
       - --lo-height
@@ -160,6 +163,8 @@ services:
     image: unifi-cam-proxy:vaapi
     container_name: tapo-c120-proxy
     restart: unless-stopped
+    environment:
+      - TZ=EST5EDT,M3.2.0,M11.1.0
     volumes:
       - ./client.pem:/client.pem:ro
     logging:
@@ -232,6 +237,7 @@ services:
     environment:
       - LAVIEW_IP=${LAVIEW_IP}
       - LAVIEW_RTSP_PATH=${LAVIEW_RTSP_PATH}
+      - TZ=EST5EDT,M3.2.0,M11.1.0
     volumes:
       - ./go2rtc.yaml:/config/go2rtc.yaml:ro
     logging:
@@ -252,6 +258,7 @@ services:
       - video
     environment:
       - LIBVA_DRIVER_NAME=iHD
+      - TZ=EST5EDT,M3.2.0,M11.1.0
     volumes:
       - ./client.pem:/client.pem:ro
     logging:
@@ -318,8 +325,10 @@ services:
       - "640"
       - --lo-height
       - "360"
+      # Measured 12.0 (ONVIF claims 25 but the camera never sends it). Also
+      # the GOP: -g lo-fps gives one keyframe per second.
       - --lo-fps
-      - "15"
+      - "12"
 
   # Decodes the camera's own AI detection rectangles (person/vehicle/
   # animal, the same boxes the Reolink app draws) off the Baichuan
@@ -341,5 +350,6 @@ services:
       - CAM_USER=${CAM_USER}
       - CAM_PASS=${CAM_PASS}
       - SINK_URL=http://reolink-floodlight-proxy:7999/detections
+      - TZ=EST5EDT,M3.2.0,M11.1.0
       # LABEL_REMAP no longer needed: the sidecar now decodes all
       # per-class wrapper copies itself and labels by confidence.
