@@ -228,8 +228,8 @@ services:
   # LaView LV-PWL2 (probed 2026-11-14): channel0 is HEVC 2560x1440 ~12 fps
   # (ONVIF wrongly says H.264), channel1 H.264 640x360. RTSP on 5543 under a
   # per-device path (LAVIEW_RTSP_PATH in .env), no auth. Main stream is
-  # transcoded to H.264: CPU decode (the iGPU's HEVC decoder errors on this
-  # stream) + VA-API encode. Motion via ONVIF events, no smart detections.
+  # passed through as H.265; the H.264 sub stream is re-encoded to HEVC
+  # (CPU decode + VA-API encode). Motion via ONVIF events, no smart detections.
   # The camera allows 2 RTSP sessions, so the proxy reads via go2rtc.
   laview-go2rtc:
     image: alexxit/go2rtc:1.9.15
