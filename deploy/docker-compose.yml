@@ -206,6 +206,97 @@ services:
       - --lo-fps
       - "20"
 
+  # LaView LV-PWL2 (probed 2026-11-14): channel0 is HEVC 2560x1440 ~12 fps
+  # (ONVIF wrongly says H.264), channel1 H.264 640x360. RTSP on 5543 under a
+  # per-device path (LAVIEW_RTSP_PATH in .env), no auth. Main stream is
+  # transcoded to H.264: CPU decode (the iGPU's HEVC decoder errors on this
+  # stream) + VA-API encode. Video + recording only, no motion events.
+  # The camera allows 2 RTSP sessions, so the proxy reads via go2rtc.
+  laview-go2rtc:
+    image: alexxit/go2rtc:1.9.9
+    container_name: laview-go2rtc
+    restart: unless-stopped
+    environment:
+      - LAVIEW_IP=${LAVIEW_IP}
+      - LAVIEW_RTSP_PATH=${LAVIEW_RTSP_PATH}
+    volumes:
+      - ./go2rtc.yaml:/config/go2rtc.yaml:ro
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  laview-proxy:
+    image: unifi-cam-proxy:vaapi
+    container_name: laview-proxy
+    restart: unless-stopped
+    depends_on:
+      - laview-go2rtc
+    devices:
+      - /dev/dri:/dev/dri
+    group_add:
+      - video
+    environment:
+      - LIBVA_DRIVER_NAME=iHD
+    volumes:
+      - ./client.pem:/client.pem:ro
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    command:
+      - unifi-cam-proxy
+      - --host
+      - "${NVR_IP}"
+      - --cert
+      - /client.pem
+      - --token
+      - "${LAVIEW_TOKEN}"
+      - --mac
+      - "${LAVIEW_MAC}"
+      - --ip
+      - "${LAVIEW_IP}"
+      - --name
+      - "${LAVIEW_NAME}"
+      - --model
+      - "UVC G5 Pro"
+      - --sysid
+      - "0xa598"
+      - --platform
+      - "sav837gw"
+      - --fw-version
+      - "5.5.45"
+      - --fw-build
+      - "92ebf37.260724.1639"
+      - rtsp
+      - -s
+      - rtsp://laview-go2rtc:8554/laview_main
+      - rtsp://laview-go2rtc:8554/laview_sub
+      - --ffmpeg-args
+      - "-c:v copy -af asetpts=N/SR/TB -ar 16000 -ac 1 -c:a aac -b:a 32k"
+      - --hw-transcode
+      - --hw-backend
+      - vaapi
+      - --sw-decode
+      - --transcode-width
+      - "2560"
+      - --transcode-height
+      - "1440"
+      - --transcode-bitrate
+      - "4M"
+      - --hi-codec
+      - h264
+      - --hi-fps
+      - "12"
+      - --lo-width
+      - "640"
+      - --lo-height
+      - "360"
+      - --lo-fps
+      - "15"
+
   # Decodes the camera's own AI detection rectangles (person/vehicle/
   # animal, the same boxes the Reolink app draws) off the Baichuan
   # protocol via nodelink-js, and streams them to the proxy so Protect

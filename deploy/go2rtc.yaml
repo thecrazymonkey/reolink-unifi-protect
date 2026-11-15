@@ -1,0 +1,13 @@
+# One camera session per channel, shared by every proxy pipeline. The
+# LaView refuses a 3rd concurrent RTSP session (403 on SETUP) and the proxy
+# opens 4 (video1-3 + snapshots). Values come from .env via compose.
+streams:
+  laview_main: rtsp://${LAVIEW_IP}:5543/${LAVIEW_RTSP_PATH}/live/channel0
+  laview_sub: rtsp://${LAVIEW_IP}:5543/${LAVIEW_RTSP_PATH}/live/channel1
+
+rtsp:
+  listen: ":8554"
+api:
+  listen: "" # no web UI
+webrtc:
+  listen: ""

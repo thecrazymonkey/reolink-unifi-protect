@@ -153,6 +153,14 @@ class UnifiCamBase(metaclass=ABCMeta):
             default="/dev/dri/renderD128",
             help="DRM render node for hardware transcoding",
         )
+        # Skylake's VA-API HEVC decoder fails on some cameras' streams
+        # ("Failed to end picture decode issue: 23") while its encoder works;
+        # decoding 2560x1440@12 in software costs ~36% of one i5-6500T core.
+        parser.add_argument(
+            "--sw-decode",
+            action="store_true",
+            help="With --hw-backend vaapi: decode on the CPU, upload, encode on the GPU",
+        )
         parser.add_argument(
             "--transcode-width",
             default=2560,
@@ -319,6 +327,10 @@ class UnifiCamBase(metaclass=ABCMeta):
     def _hw_backend(self) -> str:
         return getattr(self.args, "hw_backend", "qsv")
 
+    def _vaapi_upload(self) -> str:
+        # Software-decoded frames must be moved onto VA surfaces first.
+        return "format=nv12,hwupload," if getattr(self.args, "sw_decode", False) else ""
+
     async def _check_hw(self) -> None:
         # Once per process: a wrong or unpinned libva driver otherwise shows
         # up only as transcoded channels respawn-looping. Logged, not fatal:
@@ -369,13 +381,14 @@ class UnifiCamBase(metaclass=ABCMeta):
                     "-ar 16000 -ac 1 -codec:a aac -b:a 32k"
                 )
                 return (
-                    f'-vf "scale_vaapi={size}format=nv12" -c:v hevc_vaapi'
+                    f'-vf "{self._vaapi_upload()}scale_vaapi={size}format=nv12"'
+                    " -c:v hevc_vaapi"
                     f" -b:v {self.args.lo_transcode_bitrate} -g {lo_fps} -bf 0 {audio}"
                 )
             if self._hw_transcoding(stream_index):
                 hi_fps = getattr(self.args, "hi_fps", None) or 30
                 return (
-                    f'-vf "scale_vaapi=w={self.args.transcode_width}'
+                    f'-vf "{self._vaapi_upload()}scale_vaapi=w={self.args.transcode_width}'
                     f':h={self.args.transcode_height}:format=nv12"'
                     f" -c:v h264_vaapi -b:v {self.args.transcode_bitrate}"
                     f" -g {hi_fps} -bf 0"
@@ -1931,7 +1944,9 @@ class UnifiCamBase(metaclass=ABCMeta):
             stream_index
         ):
             device = shlex.quote(self.args.hw_device)
-            if self._hw_backend() == "vaapi":
+            if self._hw_backend() == "vaapi" and self._vaapi_upload():
+                prefix = f"-vaapi_device {device} "
+            elif self._hw_backend() == "vaapi":
                 # Automatic decoder threading can exhaust FFmpeg 6 VA-API
                 # surface pools on workers with many CPUs. Decode on the GPU
                 # with one submission thread; QSV/passthrough stay unchanged.

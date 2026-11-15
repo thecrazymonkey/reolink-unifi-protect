@@ -96,6 +96,17 @@ async def test_vaapi_pipeline_keeps_hardware_frames_and_correct_framing(
     assert argv[argv.index("unifi.hevc_flv") + 1] == str(int(stream[-1]) - 1)
 
 
+def test_sw_decode_uploads_to_vaapi_encoder(monkeypatch):
+    cam = make_cam("--hw-backend", "vaapi", "--hw-transcode", "--sw-decode")
+    monkeypatch.setattr("unifi.cams.base.subprocess.check_output", lambda _: b"")
+    base = shlex.split(cam.get_base_ffmpeg_args("video1"))
+    assert "-hwaccel" not in base
+    assert base[base.index("-vaapi_device") + 1] == "/dev/dri/renderD128"
+    extra = shlex.split(cam.get_extra_ffmpeg_args("video1"))
+    assert extra[extra.index("-vf") + 1].startswith("format=nv12,hwupload,scale_vaapi=")
+    assert "-vaapi_device" not in cam.get_base_ffmpeg_args("video2")
+
+
 def test_high_transcode_does_not_enable_lower_transcodes(monkeypatch):
     cam = make_cam("--hw-backend", "vaapi", "--hw-transcode")
     monkeypatch.setattr("unifi.cams.base.subprocess.check_output", lambda _: b"")
