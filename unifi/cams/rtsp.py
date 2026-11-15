@@ -72,6 +72,14 @@ class RTSPCam(UnifiCamBase):
             help="Specify a port number to enable the HTTP API (default: disabled)",
         )
         parser.add_argument(
+            "--onvif-events",
+            default=None,
+            metavar="IP:PORT",
+            help="Camera ONVIF service; turns its motion events into Protect motion",
+        )
+        parser.add_argument("--onvif-user", default="admin")
+        parser.add_argument("--onvif-password", default="")
+        parser.add_argument(
             "--snapshot-url",
             "-i",
             default=None,
@@ -366,12 +374,31 @@ class RTSPCam(UnifiCamBase):
         ):
             self._push_task = asyncio.create_task(self._push_reolink())
 
+        if getattr(self.args, "onvif_events", None):
+            from unifi.onvif_events import watch
+
+            async def on_motion(active: bool) -> None:
+                self.logger.info(f"ONVIF motion {'start' if active else 'stop'}")
+                await (self.trigger_motion_start if active else self.trigger_motion_stop)()
+
+            self._onvif_task = asyncio.create_task(
+                watch(
+                    self.args.onvif_events,
+                    self.args.onvif_user,
+                    self.args.onvif_password,
+                    on_motion,
+                    self.logger,
+                )
+            )
+
         if self.args.reolink_ai_host and not self.args.reolink_push_ai:
             await self._poll_reolink_ai()
         elif getattr(self, "_push_task", None):
             await self._push_task
         elif getattr(self, "_visitor_task", None):
             await self._visitor_task
+        elif getattr(self, "_onvif_task", None):
+            await self._onvif_task
 
     # Loopback port the bundled sidecar reports to when --ai-sink-port is not given.
     SIDECAR_SINK_PORT = 8099
@@ -1214,6 +1241,9 @@ class RTSPCam(UnifiCamBase):
         sidecar = getattr(self, "_sidecar_task", None)
         if sidecar is not None:
             sidecar.cancel()  # the supervisor terminates the node process
+        onvif = getattr(self, "_onvif_task", None)
+        if onvif is not None:
+            onvif.cancel()  # run() starts a fresh one on reconnect
         ptz = getattr(self, "_ptz", None)
         if ptz is not None:
             await ptz.close()  # reopened lazily if this instance is reused
