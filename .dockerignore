@@ -11,3 +11,4 @@ run/
 MANIFEST
 MANIFEST.in
 .pyre/
+**/.env
