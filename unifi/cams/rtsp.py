@@ -1048,12 +1048,16 @@ class RTSPCam(UnifiCamBase):
                 while True:
                     await asyncio.sleep(poll)
                     await self._expire_stale_ai()
-                    if host.baichuan.session_active:
+                    # Not session_active: it stays True on the logged-in flag after the
+                    # library fails to re-establish a dropped subscription, leaving us
+                    # deaf. events_active only turns True once the camera pushes (it
+                    # sends its alarm state on every subscribe) and False on disconnect.
+                    if host.baichuan.events_active:
                         lost_since = None
                     else:
                         lost_since = lost_since or time.time()
                         if time.time() - lost_since > lost_limit:
-                            raise RuntimeError(f"session lost for >{lost_limit:.0f}s")
+                            raise RuntimeError(f"no push events for >{lost_limit:.0f}s")
             except asyncio.CancelledError:
                 raise
             except Exception as e:

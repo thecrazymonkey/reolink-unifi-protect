@@ -100,11 +100,11 @@ async def test_box_sidecar_takes_over_while_alive(cam):
     assert cam.events == []
 
 
-def _fake_reolink(monkeypatch, fail_logins):
+def _fake_reolink(monkeypatch, fail_logins, events_active=True):
     log = {"logins": [], "events": 0}
 
     class Baichuan:
-        session_active = True
+        session_active = True  # stays True after the TCP link dies (logged_in flag)
 
         async def login(self):
             log["logins"].append(time.time())
@@ -119,6 +119,8 @@ def _fake_reolink(monkeypatch, fail_logins):
 
         async def logout(self):
             pass
+
+    Baichuan.events_active = events_active
 
     class Host:
         def __init__(self, *args, **kwargs):
@@ -153,6 +155,21 @@ async def test_push_retries_forever_with_capped_backoff(cam, monkeypatch):
     gaps = [b - a for a, b in zip(log["logins"], log["logins"][1:])]
     assert gaps[1] > gaps[0] * 1.5  # grows ...
     assert max(gaps) < 0.3  # ... but is capped (0.08 s plus scheduling slack)
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+
+
+async def test_push_reconnects_when_events_stop_but_session_looks_alive(cam, monkeypatch):
+    # 2026-11-15 07:00Z: the library lost the subscription, failed to re-establish it
+    # and still reported session_active, so the proxy sat deaf until restarted.
+    log = _fake_reolink(monkeypatch, fail_logins=0, events_active=False)
+    cam._push_min_delay = 0.01
+    cam._push_watch_interval = 0.01
+    cam._push_lost_limit = 0.03
+    task = asyncio.create_task(cam._push_reolink())
+    await asyncio.sleep(0.3)
+    assert len(log["logins"]) >= 2, "a dead subscription must force a reconnect"
     task.cancel()
     with pytest.raises(asyncio.CancelledError):
         await task
