@@ -146,6 +146,66 @@ services:
       - --lo-fps
       - "10"
 
+  # Tapo C120 (ONVIF profiles probed 2026-11-14): H.264 2560x1440 and
+  # 640x360, both 20 fps, G.711 A-law 8k audio (re-encoded to AAC below).
+  # Generic rtsp source: video + recording only, no motion events.
+  # Start once TAPO_TOKEN is in .env: docker compose up -d tapo-c120-proxy
+  tapo-c120-proxy:
+    image: unifi-cam-proxy:vaapi
+    container_name: tapo-c120-proxy
+    restart: unless-stopped
+    volumes:
+      - ./client.pem:/client.pem:ro
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    command:
+      - unifi-cam-proxy
+      - --host
+      - "${NVR_IP}"
+      - --cert
+      - /client.pem
+      - --token
+      - "${TAPO_TOKEN}"
+      - --mac
+      - "${TAPO_MAC}"
+      - --ip
+      - "${TAPO_IP}"
+      - --name
+      - "${TAPO_NAME}"
+      - --model
+      - "UVC G5 Pro"
+      - --sysid
+      - "0xa598"
+      - --platform
+      - "sav837gw"
+      - --fw-version
+      - "5.5.45"
+      - --fw-build
+      - "92ebf37.260724.1639"
+      - rtsp
+      - -s
+      - "rtsp://${TAPO_USER}:${TAPO_PASS}@${TAPO_IP}:554/stream1"
+      - "rtsp://${TAPO_USER}:${TAPO_PASS}@${TAPO_IP}:554/stream2"
+      - --ffmpeg-args
+      - "-c:v copy -af asetpts=N/SR/TB -ar 16000 -ac 1 -c:a aac -b:a 32k"
+      - --hi-codec
+      - h264
+      - --hi-width
+      - "2560"
+      - --hi-height
+      - "1440"
+      - --hi-fps
+      - "20"
+      - --lo-width
+      - "640"
+      - --lo-height
+      - "360"
+      - --lo-fps
+      - "20"
+
   # Decodes the camera's own AI detection rectangles (person/vehicle/
   # animal, the same boxes the Reolink app draws) off the Baichuan
   # protocol via nodelink-js, and streams them to the proxy so Protect
