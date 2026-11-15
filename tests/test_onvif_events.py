@@ -1,6 +1,6 @@
-"""ONVIF PullPoint parsing: motion topics only, last state wins."""
+"""ONVIF PullPoint parsing: motion topics only, every transition kept."""
 
-from unifi.onvif_events import envelope, motion_state, pin_host
+from unifi.onvif_events import envelope, motion_states, pin_host
 
 
 def msg(topic, name, value):
@@ -12,22 +12,22 @@ def msg(topic, name, value):
 
 
 def test_motion_alarm_state():
-    assert motion_state(msg("tns1:VideoSource/MotionAlarm", "State", "true")) is True
-    assert motion_state(msg("tns1:VideoSource/MotionAlarm", "State", "false")) is False
+    assert motion_states(msg("tns1:VideoSource/MotionAlarm", "State", "true")) == [True]
+    assert motion_states(msg("tns1:VideoSource/MotionAlarm", "State", "false")) == [False]
 
 
-def test_cell_motion_detector_and_last_wins():
+def test_cell_motion_detector_keeps_start_and_stop():
     xml = msg("tns1:RuleEngine/CellMotionDetector/Motion", "IsMotion", "true") + msg(
         "tns1:RuleEngine/CellMotionDetector/Motion", "IsMotion", "false"
     )
-    assert motion_state(xml) is False
+    assert motion_states(xml) == [True, False]
 
 
 def test_non_motion_topics_ignored():
     # LaView sends these as soon as it is dark; they must not open an event.
     xml = msg("tns1:VideoSource/ImageTooDark/ImagingService", "State", "true")
-    assert motion_state(xml) is None
-    assert motion_state("<Envelope/>") is None
+    assert motion_states(xml) == []
+    assert motion_states("<Envelope/>") == []
 
 
 def test_pin_host_ignores_camera_supplied_host():

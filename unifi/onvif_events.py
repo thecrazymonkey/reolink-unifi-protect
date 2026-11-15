@@ -7,13 +7,14 @@ RuleEngine/CellMotionDetector/Motion (IsMotion).
 
 import asyncio
 import base64
+import contextlib
 import datetime
 import hashlib
 import logging
 import os
 import re
 import urllib.parse
-from typing import Awaitable, Callable, Optional
+from typing import Awaitable, Callable
 from xml.sax.saxutils import escape
 
 import aiohttp
@@ -54,15 +55,16 @@ def pin_host(url: str, host: str) -> str:
     return urllib.parse.urlunsplit(("http", netloc, u.path, u.query, ""))
 
 
-def motion_state(xml: str) -> Optional[bool]:
-    """Last motion state in a PullMessages response, None if it carries none."""
-    state = None
+def motion_states(xml: str) -> list[bool]:
+    """Motion states in a PullMessages response, in order (a short motion can
+    start and stop within one reply)."""
+    states = []
     for msg in _NOTIFY.findall(xml):
         topic = _TOPIC.search(msg)
         item = _ITEM.search(msg)
         if topic and "Motion" in topic.group(1) and item:
-            state = item.group(2).lower() == "true"
-    return state
+            states.append(item.group(2).lower() == "true")
+    return states
 
 
 EV = "http://www.onvif.org/ver10/events/wsdl"
@@ -112,10 +114,10 @@ async def watch(
                     reply = await call(pull_url, PULL)
                     if "Fault" in reply:
                         raise RuntimeError(f"pull fault: {reply[:200]}")
-                    state = motion_state(reply)
-                    if state is not None and state != active:
-                        active = state
-                        await on_motion(state)
+                    for state in motion_states(reply):
+                        if state != active:
+                            active = state
+                            await on_motion(state)
                     await call(pull_url, RENEW)
             except asyncio.CancelledError:
                 raise
@@ -123,6 +125,9 @@ async def watch(
                 logger.warning(f"ONVIF events lost ({e}); retry in {delay:.0f}s")
                 if active:
                     active = False
-                    await on_motion(False)
+                    # on_motion itself may be what failed (Protect link down);
+                    # a second failure here must not end the watcher.
+                    with contextlib.suppress(Exception):
+                        await on_motion(False)
                 await asyncio.sleep(delay)
                 delay = min(delay * 2, 120.0)
