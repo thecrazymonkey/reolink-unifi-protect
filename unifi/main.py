@@ -2,6 +2,7 @@ import argparse
 import asyncio
 import logging
 import sys
+from pathlib import Path
 from shutil import which
 
 import coloredlogs
@@ -129,6 +130,13 @@ def parse_args():
         "--verbose", "-v", action="store_true", help="increase output verbosity"
     )
 
+    parser.add_argument(
+        "--heartbeat-file",
+        default=None,
+        help="Touch this file every few seconds from the event loop, so a"
+        " liveness probe can tell a hung proxy from a running one",
+    )
+
     sp = parser.add_subparsers(
         help="Camera implementations",
         dest="impl",
@@ -158,6 +166,21 @@ async def generate_token(args, logger):
         await protect.close_session()
 
 
+HEARTBEAT_INTERVAL_SEC = 10
+
+
+async def heartbeat(path: str, interval: float = HEARTBEAT_INTERVAL_SEC) -> None:
+    """Touch `path` forever. It runs on the event loop, so the file goes
+    stale exactly when the loop stops turning; an unreachable camera or NVR
+    does not stop it."""
+    while True:
+        try:
+            Path(path).touch()
+        except OSError:
+            logging.getLogger("Core").exception("Could not touch %s", path)
+        await asyncio.sleep(interval)
+
+
 async def run():
     args = parse_args()
     klass = CAMS[args.impl]
@@ -185,9 +208,19 @@ async def run():
         logger.error("A valid token is required")
         sys.exit(1)
 
-    cam = klass(args, logger)
-    c = Core(args, cam, core_logger)
-    await c.run()
+    # Keep a reference: the loop only holds tasks weakly.
+    beat = (
+        asyncio.create_task(heartbeat(args.heartbeat_file))
+        if args.heartbeat_file
+        else None
+    )
+    try:
+        cam = klass(args, logger)
+        c = Core(args, cam, core_logger)
+        await c.run()
+    finally:
+        if beat is not None:
+            beat.cancel()
 
 
 def main():
